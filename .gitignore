@@ -1,0 +1,18 @@
+# Sensitive API Keys & Environment Files
+secrets.txt
+.env
+.streamlit/secrets.toml
+
+# Python Cache & Bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Temporary Media & Upload Files
+*.tmp
+*.mp4
+*.mov
+
+# Virtual Environments
+venv/
+.venv/
