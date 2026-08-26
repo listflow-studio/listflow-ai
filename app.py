@@ -293,11 +293,11 @@ Return ONLY raw, valid JSON. Do not include markdown code block backticks outsid
                     video_upload_ref = client.files.upload(file=tmp_video_path)
                     contents_payload.append(video_upload_ref)
 
-                # Prioritized model endpoints requested by Gemini API
+                # Exactly matching the required flash endpoint
                 models_to_try = [
-                    "gemini-2.5-flash",
-                    "gemini-3.1-pro-preview",
-                    "gemini-2.5-pro"
+                    "gemini-3.6-flash",
+                    "gemini-3.6-flash-preview",
+                    "gemini-flash"
                 ]
                 
                 response = None
