@@ -18,7 +18,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# White-label styling: hide Streamlit default chrome, menu, footer & deploy badges
+# White-label styling: hide Streamlit header, menu, deploy button, viewer badges, and footer
 hide_streamlit_style = """
     <style>
     #MainMenu {visibility: hidden;}
@@ -87,7 +87,7 @@ def log_lead_profile(name, phone, ig, email, rera):
             pass
 
 # -------------------------------------------------------------
-# Gemini Client Initialization & Dynamic Model Finder
+# Gemini Client Initialization
 # -------------------------------------------------------------
 def get_gemini_client():
     api_key = None
@@ -102,33 +102,6 @@ def get_gemini_client():
     return genai.Client(api_key=api_key)
 
 client = get_gemini_client()
-
-def get_best_available_model(client):
-    """Dynamically detects active models supported by the API key to prevent hardcoded 404 errors."""
-    try:
-        models = list(client.models.list())
-        # Filter for models that support generateContent
-        supported = [
-            m.name.replace("models/", "") 
-            for m in models 
-            if hasattr(m, "supported_generation_methods") and "generateContent" in (m.supported_generation_methods or [])
-        ]
-        if not supported:
-            supported = [m.name.replace("models/", "") for m in models]
-        
-        # Priority 1: Available flash models
-        flash_models = [m for m in supported if "flash" in m.lower()]
-        if flash_models:
-            return flash_models[0]
-        
-        # Priority 2: Any available generation model
-        if supported:
-            return supported[0]
-    except Exception:
-        pass
-    
-    # Fallback to the latest standard target endpoint
-    return "gemini-3.6-flash"
 
 # -------------------------------------------------------------
 # Sidebar: Agent/Builder Profile, Reset & Asynchronous Feedback
@@ -218,7 +191,6 @@ with col2:
         key="t_lang"
     )
     
-    # Media Upload: Multi-Photo & Video Walkthrough Tabs
     media_tab1, media_tab2 = st.tabs(["📸 Upload Property Photos (Multiple)", "🎥 Upload Video Walkthrough"])
     
     uploaded_photos = []
@@ -253,7 +225,6 @@ st.markdown("---")
 generate_btn = st.button("🚀 Generate Multi-Channel Campaign", type="primary", use_container_width=True)
 
 if generate_btn:
-    # Mandatory Validation Checks
     if not agent_name.strip() or not agent_phone.strip() or not agent_email.strip():
         st.error("⚠️ Please complete the required **Agent / Builder Profile** fields in the sidebar (Name, WhatsApp, and Email) to brand your campaign.")
     elif not prop_location.strip() or not prop_price.strip() or not prop_specs.strip():
@@ -324,16 +295,32 @@ Return ONLY raw, valid JSON.
                     video_upload_ref = client.files.upload(file=tmp_video_path)
                     contents_payload.append(video_upload_ref)
 
-                # Dynamically resolve available model
-                active_model = get_best_available_model(client)
+                # Verified active models from your key's model list
+                models_to_try = [
+                    "gemini-3.6-flash",
+                    "gemini-3.7-flash"
+                ]
+                
+                response = None
+                errors_log = []
 
-                response = client.models.generate_content(
-                    model=active_model,
-                    contents=contents_payload,
-                    config=types.GenerateContentConfig(
-                        response_mime_type="application/json"
-                    )
-                )
+                for model_candidate in models_to_try:
+                    try:
+                        response = client.models.generate_content(
+                            model=model_candidate,
+                            contents=contents_payload,
+                            config=types.GenerateContentConfig(
+                                response_mime_type="application/json"
+                            )
+                        )
+                        if response and response.text:
+                            break
+                    except Exception as err:
+                        errors_log.append(f"{model_candidate}: {str(err)}")
+                        continue
+
+                if not response or not response.text:
+                    raise Exception(" | ".join(errors_log))
 
                 result_data = json.loads(response.text)
                 st.session_state["campaign_result"] = result_data
@@ -385,7 +372,7 @@ if "campaign_result" in st.session_state:
         st.text_area("Facebook Content", value=res.get("facebook_ad", ""), height=260)
 
     with tab_mls:
-        st.subheader("MLS & Property Portal Description")
+        st.subheader("MLS & Portal Description")
         st.text_area("Standard Portal Description", value=res.get("mls_portal_description", ""), height=280)
 
     with tab_reel:
