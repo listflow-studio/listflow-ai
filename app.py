@@ -65,20 +65,25 @@ def get_gemini_client():
 client = get_gemini_client()
 
 # -------------------------------------------------------------
-# Sidebar: Broker Profile & Support/Feedback Drawer
+# Sidebar: Broker Profile, Reset Button & Support Drawer
 # -------------------------------------------------------------
 with st.sidebar:
     st.image("https://images.unsplash.com/photo-1560518883-ce09059eeffa?w=600&auto=format&fit=crop&q=80", use_container_width=True)
     st.title("🏢 ListFlow AI")
     st.caption("AI-Powered Multi-Channel Real Estate Studio")
     
+    if st.button("🔄 Reset Studio", use_container_width=True):
+        for key in list(st.session_state.keys()):
+            del st.session_state[key]
+        st.rerun()
+    
     st.markdown("---")
     st.subheader("👤 Agent / Broker Profile")
     st.caption("Enter your agency branding to auto-inject into listings:")
-    agent_name = st.text_input("Agent / Agency Name", placeholder="e.g., Apex Realty Associates")
-    agent_phone = st.text_input("WhatsApp / Phone Number", placeholder="e.g., 9884012345")
-    agent_email = st.text_input("Contact Email", placeholder="e.g., agent@apexrealty.com")
-    agent_rera = st.text_input("RERA / License ID (Optional)", placeholder="e.g., TN/AGENT/2026/00123")
+    agent_name = st.text_input("Agent / Agency Name", placeholder="e.g., Apex Realty Associates", key="ag_name")
+    agent_phone = st.text_input("WhatsApp / Phone Number", placeholder="e.g., 9884012345", key="ag_phone")
+    agent_email = st.text_input("Contact Email", placeholder="e.g., agent@apexrealty.com", key="ag_email")
+    agent_rera = st.text_input("RERA / License ID (Optional)", placeholder="e.g., TN/AGENT/2026/00123", key="ag_rera")
     
     st.markdown("---")
     st.subheader("💬 Need Help or Have Feedback?")
@@ -117,17 +122,17 @@ col1, col2 = st.columns([1.1, 0.9], gap="medium")
 with col1:
     st.subheader("📝 Property Specifications")
     
-    prop_title = st.text_input("Property Headline / Name", placeholder="e.g., Ultra-Luxury 3 BHK Penthouse in Anna Nagar")
+    prop_title = st.text_input("Property Headline / Name", placeholder="e.g., Ultra-Luxury 3 BHK Penthouse in Anna Nagar", key="p_title")
     
     c1, c2 = st.columns(2)
     with c1:
-        prop_location = st.text_input("Location / Neighborhood", placeholder="e.g., Anna Nagar West, Chennai")
-        prop_price = st.text_input("Price / Price Range", placeholder="e.g., ₹1.85 Cr (Negotiable)")
+        prop_location = st.text_input("Location / Neighborhood", placeholder="e.g., Anna Nagar West, Chennai", key="p_loc")
+        prop_price = st.text_input("Price / Price Range", placeholder="e.g., ₹1.85 Cr (Negotiable)", key="p_price")
     with c2:
-        prop_type = st.selectbox("Property Type", ["Residential Apartment", "Independent Villa", "Plot / Land", "Commercial Space", "Penthouse", "Studio Apartment"])
-        prop_size = st.text_input("Built-up Area / Carpet Area", placeholder="e.g., 1,850 sq.ft (Carpet)")
+        prop_type = st.selectbox("Property Type", ["Residential Apartment", "Independent Villa", "Plot / Land", "Commercial Space", "Penthouse", "Studio Apartment"], key="p_type")
+        prop_size = st.text_input("Built-up Area / Carpet Area", placeholder="e.g., 1,850 sq.ft (Carpet)", key="p_size")
         
-    prop_specs = st.text_area("Key Features & Amenities", placeholder="e.g., 3 Bedrooms, 3 Bathrooms, 2 Balconies, East Facing, Modular Kitchen, 2 Covered Car Parks, Swimming Pool, Clubhouse, 24/7 Security.", height=110)
+    prop_specs = st.text_area("Key Features & Amenities", placeholder="e.g., 3 Bedrooms, 3 Bathrooms, 2 Balconies, East Facing, Modular Kitchen, 2 Covered Car Parks, Swimming Pool, Clubhouse, 24/7 Security.", height=110, key="p_specs")
 
 with col2:
     st.subheader("🎯 Campaign Strategy & Visuals")
@@ -140,7 +145,8 @@ with col2:
             "📈 High-ROI Investor Focus (High Rental Yields & Appreciation)",
             "⏳ Urgent Distress Sale (Priced to Sell Fast)",
             "🌍 NRI / Global Investor Focus (Turnkey Asset Management)"
-        ]
+        ],
+        key="c_angle"
     )
     
     target_language = st.selectbox(
@@ -154,7 +160,8 @@ with col2:
             "Malayalam (മലയാളം)",
             "Tanglish (Tamil + English Hybrid)",
             "Hinglish (Hindi + English Hybrid)"
-        ]
+        ],
+        key="t_lang"
     )
     
     # Media Upload: Multi-Photo & Video Walkthrough Tabs
