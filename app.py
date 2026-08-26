@@ -186,26 +186,26 @@ with col2:
     )
     
     # Media Upload: Multi-Photo & Video Walkthrough Tabs
-    media_tab1, media_tab2 = st.tabs(["📸 Upload Photos (Multi-Image)", "🎥 Upload Video Walkthrough"])
+    media_tab1, media_tab2 = st.tabs(["📸 Upload Property Photos (Multiple)", "🎥 Upload Video Walkthrough"])
     
     uploaded_photos = []
     uploaded_video = None
     
     with media_tab1:
         uploaded_photos = st.file_uploader(
-            "Upload Property Photos (Living Room, Kitchen, Balcony, Exterior)", 
-            type=["jpg", "jpeg", "png"], 
+            "Select and upload multiple property images (Living Room, Kitchen, Bedrooms, Exterior):", 
+            type=["jpg", "jpeg", "png", "webp"], 
             accept_multiple_files=True,
             key="img_up"
         )
         if uploaded_photos:
-            st.caption(f"📸 {len(uploaded_photos)} photo(s) ready for multimodal AI analysis")
+            st.caption(f"📸 **{len(uploaded_photos)} photo(s) selected** for AI vision analysis")
             grid_cols = st.columns(min(len(uploaded_photos), 4))
             for idx, photo in enumerate(uploaded_photos[:4]):
                 with grid_cols[idx]:
                     st.image(Image.open(photo), use_container_width=True)
             if len(uploaded_photos) > 4:
-                st.caption(f"+ {len(uploaded_photos) - 4} more photos queued for AI processing")
+                st.caption(f"+ {len(uploaded_photos) - 4} more photos queued for analysis")
             
     with media_tab2:
         uploaded_video = st.file_uploader("Upload Walkthrough Video Clip", type=["mp4", "mov", "avi"], key="vid_up")
@@ -261,7 +261,7 @@ Generate a comprehensive, high-converting 6-channel marketing campaign package f
 - Direct WhatsApp Inquiry Link: {wa_link}
 
 ### MULTIMODAL INSTRUCTION:
-If property images or video clips are provided, examine them carefully to identify key interior features, architectural highlights, natural lighting, and premium fixtures. Seamlessly highlight these authentic visual details in the copy.
+If property images or video clips are provided, examine each of them carefully to identify key interior features, architectural highlights, natural lighting, and premium fixtures. Seamlessly highlight these authentic visual details in the copy.
 
 ### FORMATTING REQUIREMENTS:
 Generate high-performing, ready-to-copy marketing copy strictly formatted as a valid JSON object with the following keys:
@@ -293,24 +293,13 @@ Return ONLY raw, valid JSON. Do not include markdown code block backticks outsid
                     video_upload_ref = client.files.upload(file=tmp_video_path)
                     contents_payload.append(video_upload_ref)
 
-                # Fallback handler across active model endpoints
-                chosen_model = "gemini-2.5-flash"
-                try:
-                    response = client.models.generate_content(
-                        model=chosen_model,
-                        contents=contents_payload,
-                        config=types.GenerateContentConfig(
-                            response_mime_type="application/json"
-                        )
+                response = client.models.generate_content(
+                    model="gemini-2.5-flash",
+                    contents=contents_payload,
+                    config=types.GenerateContentConfig(
+                        response_mime_type="application/json"
                     )
-                except Exception:
-                    response = client.models.generate_content(
-                        model="gemini-2.5-flash",
-                        contents=contents_payload,
-                        config=types.GenerateContentConfig(
-                            response_mime_type="application/json"
-                        )
-                    )
+                )
 
                 result_data = json.loads(response.text)
                 st.session_state["campaign_result"] = result_data
