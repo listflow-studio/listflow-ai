@@ -73,8 +73,11 @@ def log_lead_profile(name, phone, ig, email, rera):
     # Check if lead with same phone already exists, otherwise append
     if not any(l.get("phone") == lead_entry["phone"] for l in leads):
         leads.append(lead_entry)
-        with open(lead_file, "w", encoding="utf-8") as f:
-            json.dump(leads, f, indent=2, ensure_ascii=False)
+        try:
+            with open(lead_file, "w", encoding="utf-8") as f:
+                json.dump(leads, f, indent=2, ensure_ascii=False)
+        except Exception:
+            pass
 
 # -------------------------------------------------------------
 # Gemini Client Initialization
@@ -290,13 +293,24 @@ Return ONLY raw, valid JSON. Do not include markdown code block backticks outsid
                     video_upload_ref = client.files.upload(file=tmp_video_path)
                     contents_payload.append(video_upload_ref)
 
-                response = client.models.generate_content(
-                    model="gemini-2.5-flash",
-                    contents=contents_payload,
-                    config=types.GenerateContentConfig(
-                        response_mime_type="application/json"
+                # Fallback handler across active model endpoints
+                chosen_model = "gemini-2.5-flash"
+                try:
+                    response = client.models.generate_content(
+                        model=chosen_model,
+                        contents=contents_payload,
+                        config=types.GenerateContentConfig(
+                            response_mime_type="application/json"
+                        )
                     )
-                )
+                except Exception:
+                    response = client.models.generate_content(
+                        model="gemini-2.5-flash",
+                        contents=contents_payload,
+                        config=types.GenerateContentConfig(
+                            response_mime_type="application/json"
+                        )
+                    )
 
                 result_data = json.loads(response.text)
                 st.session_state["campaign_result"] = result_data
