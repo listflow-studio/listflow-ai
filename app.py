@@ -65,50 +65,51 @@ def get_gemini_client():
 client = get_gemini_client()
 
 # -------------------------------------------------------------
-# Sidebar: Broker Profile, Reset Button & Support Drawer
+# Sidebar: Agent/Builder Profile, Reset & Support / Feedback
 # -------------------------------------------------------------
 with st.sidebar:
     st.image("https://images.unsplash.com/photo-1560518883-ce09059eeffa?w=600&auto=format&fit=crop&q=80", use_container_width=True)
     st.title("🏢 ListFlow AI")
     st.caption("AI-Powered Multi-Channel Real Estate Studio")
     
+    st.markdown("---")
+    st.subheader("👤 Agent / Builder / Realtor Profile")
+    st.caption("Enter your branding to auto-inject into listings:")
+    agent_name = st.text_input("Name / Firm Name", placeholder="e.g., Apex Realty / Rajesh Kumar", key="ag_name")
+    agent_phone = st.text_input("WhatsApp Number", placeholder="e.g., 9884012345", key="ag_phone")
+    agent_ig = st.text_input("Instagram Handle", placeholder="e.g., @apexrealty_official", key="ag_ig")
+    agent_email = st.text_input("Email ID", placeholder="e.g., contact@apexrealty.com", key="ag_email")
+    agent_rera = st.text_input("RERA / License ID (Optional)", placeholder="e.g., TN/AGENT/2026/00123", key="ag_rera")
+    
+    st.markdown("---")
+    # Reset Studio Button
     if st.button("🔄 Reset Studio", use_container_width=True):
         for key in list(st.session_state.keys()):
             del st.session_state[key]
         st.rerun()
     
     st.markdown("---")
-    st.subheader("👤 Agent / Broker Profile")
-    st.caption("Enter your agency branding to auto-inject into listings:")
-    agent_name = st.text_input("Agent / Agency Name", placeholder="e.g., Apex Realty Associates", key="ag_name")
-    agent_phone = st.text_input("WhatsApp / Phone Number", placeholder="e.g., 9884012345", key="ag_phone")
-    agent_email = st.text_input("Contact Email", placeholder="e.g., agent@apexrealty.com", key="ag_email")
-    agent_rera = st.text_input("RERA / License ID (Optional)", placeholder="e.g., TN/AGENT/2026/00123", key="ag_rera")
+    st.subheader("💬 Feedback & Support")
+    st.caption("Need help, want to request a feature, or connect with the founding team?")
     
-    st.markdown("---")
-    st.subheader("💬 Need Help or Have Feedback?")
-    
+    contact_number = "919884395952"
     support_email = "neyora.admin@gmail.com"
-    email_subject = "ListFlow%20AI%20Support%20%26%20Feedback"
-    whatsapp_number = "919884395952"
-    whatsapp_msg = "Hi%20Neyora%20Team%2C%20I%20have%20a%20question%20about%20ListFlow%20AI."
+    email_subject = "ListFlow%20AI%20Feedback%20%26%20Support"
+    vip_msg = urllib.parse.quote("Hi Neyora Team, I have feedback/inquiry regarding ListFlow AI:")
+    whatsapp_hook_url = f"https://wa.me/{contact_number}?text={vip_msg}"
     
     st.markdown(
         f"""
-        * 📧 **Email:** [{support_email}](mailto:{support_email}?subject={email_subject})
-        * 💬 **WhatsApp:** [Chat with Neyora Support](https://wa.me/{whatsapp_number}?text={whatsapp_msg})
-        """
+        <a href="{whatsapp_hook_url}" target="_blank" style="text-decoration:none;">
+            <div style="background:#25D366; color:white; padding:10px 14px; border-radius:8px; text-align:center; font-weight:600; font-size:0.95rem; margin-bottom:8px;">
+                💬 Chat on WhatsApp
+            </div>
+        </a>
+        """,
+        unsafe_allow_html=True
     )
+    st.markdown(f"📧 **Email:** [{support_email}](mailto:{support_email}?subject={email_subject})")
     
-    with st.expander("📝 Submit Feedback Directly"):
-        fb_note = st.text_area("Share your feature request or review:", height=80, key="fb_input")
-        if fb_note.strip():
-            encoded_fb = urllib.parse.quote(f"ListFlow AI User Feedback: {fb_note.strip()}")
-            wa_fb_link = f"https://wa.me/{whatsapp_number}?text={encoded_fb}"
-            st.markdown(f"[👉 Click to Send via WhatsApp]({wa_fb_link})", unsafe_allow_html=True)
-            mail_fb_link = f"mailto:{support_email}?subject=ListFlow%20AI%20Feedback&body={encoded_fb}"
-            st.markdown(f"[👉 Click to Send via Email]({mail_fb_link})", unsafe_allow_html=True)
-
     st.caption("Powered by Neyora Studios • Version 1.0.0")
 
 # -------------------------------------------------------------
@@ -202,7 +203,7 @@ if generate_btn:
     if not prop_location or not prop_price or not prop_specs:
         st.warning("⚠️ Please provide at least the Location, Price, and Key Features before generating.")
     else:
-        with st.spinner("✨ Gemini is analyzing your property specs, photos & videos, and crafting your 6-channel campaign..."):
+        with st.spinner("✨ Gemini is analyzing your property specs, visuals, and crafting your 6-channel campaign..."):
             
             clean_phone = "".join(filter(str.isdigit, agent_phone or "919884395952"))
             if not clean_phone.startswith("91") and len(clean_phone) == 10:
@@ -226,9 +227,10 @@ Generate a comprehensive, high-converting 6-channel marketing campaign package f
 - Conversion Strategy Angle: {campaign_angle}
 - Output Language: {target_language} (Note: If a regional language with native script like Tamil, Hindi, Telugu, Kannada, or Malayalam is selected, write the copy fluently in that native script with natural regional real-estate vocabulary).
 
-### AGENT BRANDING:
-- Agent/Agency: {display_agent}
-- Contact Phone: {agent_phone or 'Contact on Request'}
+### AGENT / BUILDER / REALTOR BRANDING:
+- Agent/Agency/Builder: {display_agent}
+- WhatsApp Number: {agent_phone or 'Contact on Request'}
+- Instagram Handle: {agent_ig or '@realtor'}
 - Email: {agent_email or 'Contact on Request'}
 - RERA ID: {agent_rera or 'Available on Request'}
 - Direct WhatsApp Inquiry Link: {wa_link}
@@ -241,7 +243,7 @@ Generate high-performing, ready-to-copy marketing copy strictly formatted as a v
 {{
   "whatsapp_blast": "Punchy, emoji-rich broadcast copy tailored for WhatsApp buyer groups. Must include bold headlines, bulleted USPs, pricing, and the clickable WhatsApp CTA link.",
   "email_campaign": "Complete HTML/Markdown email newsletter with a high open-rate Subject Line, Preview Text, Engaging Body Copy, Bulleted Feature Sheet, and Clear Booking Call to Action.",
-  "instagram_caption": "Engaging feed & carousel caption with an attention-grabbing first-line hook, lifestyle aesthetic narrative, bullet points, CTA to DM/WhatsApp, and 15 targeted hashtags.",
+  "instagram_caption": "Engaging feed & carousel caption with an attention-grabbing first-line hook, lifestyle aesthetic narrative, bullet points, IG handle tag, CTA to DM/WhatsApp, and 15 targeted hashtags.",
   "facebook_ad": "Conversational, community-focused Facebook ad copy with Primary Text, Catchy Headline, Link Description, and CTA.",
   "mls_portal_description": "Professional, descriptive, and compliance-checked listing overview suitable for MLS, 99acres, Housing.com, Magicbricks, or Zillow. Formal yet compelling.",
   "reel_script": "30-45 second short-form video reel script with timestamps, visual cues (b-roll instructions), and voiceover narration designed for Instagram Reels/YouTube Shorts."
