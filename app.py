@@ -5,6 +5,7 @@ import urllib.parse
 from datetime import datetime
 from PIL import Image
 import streamlit as st
+import requests
 from google import genai
 from google.genai import types
 
@@ -57,19 +58,33 @@ hide_streamlit_style = """
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
 # -------------------------------------------------------------
-# Lead Storage Function (Persistent Database)
+# Google Sheets & Local Lead Storage Engine
 # -------------------------------------------------------------
 def log_lead_profile(name, phone, ig, email, rera):
-    lead_file = "leads_database.json"
     lead_entry = {
         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "name": name.strip(),
         "phone": phone.strip(),
-        "instagram": ig.strip() if ig else "",
         "email": email.strip(),
+        "instagram": ig.strip() if ig else "",
         "rera": rera.strip() if rera else ""
     }
     
+    # 1. Sync directly to Google Sheets Webhook
+    webhook_url = None
+    if "LEADS_WEBHOOK_URL" in st.secrets:
+        webhook_url = st.secrets["LEADS_WEBHOOK_URL"]
+    elif os.environ.get("LEADS_WEBHOOK_URL"):
+        webhook_url = os.environ.get("LEADS_WEBHOOK_URL")
+
+    if webhook_url:
+        try:
+            requests.post(webhook_url, json=lead_entry, timeout=5)
+        except Exception:
+            pass
+
+    # 2. Local fallback backup
+    lead_file = "leads_database.json"
     leads = []
     if os.path.exists(lead_file):
         try:
@@ -295,7 +310,7 @@ Return ONLY raw, valid JSON.
                     video_upload_ref = client.files.upload(file=tmp_video_path)
                     contents_payload.append(video_upload_ref)
 
-                # Verified active models from your key's model list
+                # Active endpoints
                 models_to_try = [
                     "gemini-3.6-flash",
                     "gemini-3.7-flash"
