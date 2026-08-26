@@ -19,7 +19,6 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# White-label styling: hide Streamlit header, menu, deploy button, viewer badges, and footer
 hide_streamlit_style = """
     <style>
     #MainMenu {visibility: hidden;}
@@ -92,18 +91,22 @@ def fetch_live_credits(phone):
             url,
             params={"action": "check", "phone": cleaned},
             allow_redirects=True,
-            timeout=8
+            timeout=6
         )
         if resp.status_code == 200:
             data = resp.json()
             if data.get("status") == "success":
-                left = int(data.get("credits_left", 2))
-                allowed = bool(data.get("is_allowed", True))
+                left = int(data.get("credits_left", 0))
+                allowed = bool(data.get("is_allowed", False))
                 return left, allowed
     except Exception:
         pass
     
-    # Default to 2 free credits on clean connection
+    # Check session state before falling back
+    if f"credits_{cleaned}" in st.session_state:
+        cached = st.session_state[f"credits_{cleaned}"]
+        return cached, (cached > 0)
+    
     return 2, True
 
 def log_and_deduct_credit(name, phone, ig, email, rera):
@@ -127,15 +130,20 @@ def log_and_deduct_credit(name, phone, ig, email, rera):
                 json=lead_entry,
                 headers={"Content-Type": "application/json"},
                 allow_redirects=True,
-                timeout=10
+                timeout=8
             )
             if resp.status_code == 200:
                 data = resp.json()
                 left = int(data.get("credits_left", 0))
+                st.session_state[f"credits_{cleaned}"] = left
                 return bool(data.get("is_allowed", False)), left
         except Exception:
             pass
-    return True, 1
+    
+    curr = st.session_state.get(f"credits_{cleaned}", 2)
+    new_val = max(0, curr - 1)
+    st.session_state[f"credits_{cleaned}"] = new_val
+    return (new_val > 0), new_val
 
 # -------------------------------------------------------------
 # Gemini Client Initialization
@@ -155,7 +163,7 @@ def get_gemini_client():
 client = get_gemini_client()
 
 # -------------------------------------------------------------
-# Sidebar: Agent Profile, Single Credit Badge & Reset
+# Sidebar: Agent Profile, Synchronized Credit Badge & Reset
 # -------------------------------------------------------------
 with st.sidebar:
     st.image("https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w=800&auto=format&fit=crop&q=80", use_container_width=True)
@@ -172,10 +180,12 @@ with st.sidebar:
     agent_ig = st.text_input("Instagram Handle (Optional)", placeholder="e.g., @apexrealty_official", key="ag_ig")
     agent_rera = st.text_input("RERA / License ID (Optional)", placeholder="e.g., TN/AGENT/2026/00123", key="ag_rera")
     
-    # Single Credit Monitor Display
+    # Live synchronized credit badge
     cleaned_num = clean_phone_number(agent_phone)
     if len(cleaned_num) == 10:
         credits_left, is_allowed = fetch_live_credits(cleaned_num)
+        st.session_state[f"credits_{cleaned_num}"] = credits_left
+        
         if is_allowed and credits_left > 0:
             st.success(f"⚡ **Free Trial:** {credits_left} generation(s) left")
         else:
@@ -289,7 +299,7 @@ if generate_btn:
     elif not prop_location.strip() or not prop_price.strip() or not prop_specs.strip():
         st.warning("⚠️ Please provide at least the Location, Price, and Key Features before generating.")
     else:
-        # Pre-execution check directly against Google Sheet
+        # Pre-execution check
         credits_left, is_allowed = fetch_live_credits(cleaned_num)
         
         if not is_allowed or credits_left <= 0:
@@ -399,7 +409,7 @@ Return ONLY raw, valid JSON.
                     st.session_state["campaign_result"] = result_data
                     st.session_state["wa_link"] = wa_link
 
-                    # Record to Google Sheet and decrement credit
+                    # Record to Google Sheet and decrement
                     log_and_deduct_credit(agent_name, agent_phone, agent_ig, agent_email, agent_rera)
                     st.success("🎉 Campaign generated successfully across all 6 channels!")
 
