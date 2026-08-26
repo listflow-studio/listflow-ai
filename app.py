@@ -293,13 +293,28 @@ Return ONLY raw, valid JSON. Do not include markdown code block backticks outsid
                     video_upload_ref = client.files.upload(file=tmp_video_path)
                     contents_payload.append(video_upload_ref)
 
-                response = client.models.generate_content(
-                    model="gemini-2.5-flash",
-                    contents=contents_payload,
-                    config=types.GenerateContentConfig(
-                        response_mime_type="application/json"
-                    )
-                )
+                # Fallback list across active production endpoints
+                models_to_try = ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-1.5-flash"]
+                response = None
+                last_error = None
+
+                for model_candidate in models_to_try:
+                    try:
+                        response = client.models.generate_content(
+                            model=model_candidate,
+                            contents=contents_payload,
+                            config=types.GenerateContentConfig(
+                                response_mime_type="application/json"
+                            )
+                        )
+                        if response and response.text:
+                            break
+                    except Exception as err:
+                        last_error = err
+                        continue
+
+                if not response or not response.text:
+                    raise Exception(f"All model endpoints failed. Last error: {str(last_error)}")
 
                 result_data = json.loads(response.text)
                 st.session_state["campaign_result"] = result_data
