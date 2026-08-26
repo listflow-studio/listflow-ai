@@ -2,6 +2,7 @@ import os
 import json
 import tempfile
 import urllib.parse
+from datetime import datetime
 from PIL import Image
 import streamlit as st
 from google import genai
@@ -48,6 +49,34 @@ hide_streamlit_style = """
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
 # -------------------------------------------------------------
+# Lead Storage Function (Persistent Database)
+# -------------------------------------------------------------
+def log_lead_profile(name, phone, ig, email, rera):
+    lead_file = "leads_database.json"
+    lead_entry = {
+        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "name": name.strip(),
+        "phone": phone.strip(),
+        "instagram": ig.strip() if ig else "",
+        "email": email.strip(),
+        "rera": rera.strip() if rera else ""
+    }
+    
+    leads = []
+    if os.path.exists(lead_file):
+        try:
+            with open(lead_file, "r", encoding="utf-8") as f:
+                leads = json.load(f)
+        except Exception:
+            leads = []
+            
+    # Check if lead with same phone already exists, otherwise append
+    if not any(l.get("phone") == lead_entry["phone"] for l in leads):
+        leads.append(lead_entry)
+        with open(lead_file, "w", encoding="utf-8") as f:
+            json.dump(leads, f, indent=2, ensure_ascii=False)
+
+# -------------------------------------------------------------
 # Gemini Client Initialization
 # -------------------------------------------------------------
 def get_gemini_client():
@@ -65,7 +94,7 @@ def get_gemini_client():
 client = get_gemini_client()
 
 # -------------------------------------------------------------
-# Sidebar: Agent/Builder Profile, Reset & Support / Feedback
+# Sidebar: Agent/Builder Profile, Reset & Asynchronous Feedback
 # -------------------------------------------------------------
 with st.sidebar:
     st.image("https://images.unsplash.com/photo-1560518883-ce09059eeffa?w=600&auto=format&fit=crop&q=80", use_container_width=True)
@@ -74,11 +103,12 @@ with st.sidebar:
     
     st.markdown("---")
     st.subheader("👤 Agent / Builder / Realtor Profile")
-    st.caption("Enter your branding to auto-inject into listings:")
-    agent_name = st.text_input("Name / Firm Name", placeholder="e.g., Apex Realty / Rajesh Kumar", key="ag_name")
-    agent_phone = st.text_input("WhatsApp Number", placeholder="e.g., 9884012345", key="ag_phone")
-    agent_ig = st.text_input("Instagram Handle", placeholder="e.g., @apexrealty_official", key="ag_ig")
-    agent_email = st.text_input("Email ID", placeholder="e.g., contact@apexrealty.com", key="ag_email")
+    st.caption("Required to auto-inject your branding and direct contact links:")
+    
+    agent_name = st.text_input("Name / Agency / Builder Name *", placeholder="e.g., Apex Realty / Rajesh Kumar", key="ag_name")
+    agent_phone = st.text_input("WhatsApp Number (10 Digits) *", placeholder="e.g., 9884012345", key="ag_phone")
+    agent_email = st.text_input("Email ID *", placeholder="e.g., contact@apexrealty.com", key="ag_email")
+    agent_ig = st.text_input("Instagram Handle (Optional)", placeholder="e.g., @apexrealty_official", key="ag_ig")
     agent_rera = st.text_input("RERA / License ID (Optional)", placeholder="e.g., TN/AGENT/2026/00123", key="ag_rera")
     
     st.markdown("---")
@@ -89,26 +119,13 @@ with st.sidebar:
         st.rerun()
     
     st.markdown("---")
-    st.subheader("💬 Feedback & Support")
-    st.caption("Need help, want to request a feature, or connect with the founding team?")
+    st.subheader("📩 Feedback & Inquiries")
+    st.caption("For feature requests, custom studio setups, or enterprise inquiries:")
     
-    contact_number = "919884395952"
     support_email = "neyora.admin@gmail.com"
-    email_subject = "ListFlow%20AI%20Feedback%20%26%20Support"
-    vip_msg = urllib.parse.quote("Hi Neyora Team, I have feedback/inquiry regarding ListFlow AI:")
-    whatsapp_hook_url = f"https://wa.me/{contact_number}?text={vip_msg}"
-    
-    st.markdown(
-        f"""
-        <a href="{whatsapp_hook_url}" target="_blank" style="text-decoration:none;">
-            <div style="background:#25D366; color:white; padding:10px 14px; border-radius:8px; text-align:center; font-weight:600; font-size:0.95rem; margin-bottom:8px;">
-                💬 Chat on WhatsApp
-            </div>
-        </a>
-        """,
-        unsafe_allow_html=True
-    )
-    st.markdown(f"📧 **Email:** [{support_email}](mailto:{support_email}?subject={email_subject})")
+    email_subject = "ListFlow%20AI%20Inquiry%20%26%20Feedback"
+    st.markdown(f"📧 **Email Desk:** [{support_email}](mailto:{support_email}?subject={email_subject})")
+    st.caption("Replies within 24–48 hours.")
     
     st.caption("Powered by Neyora Studios • Version 1.0.0")
 
@@ -127,13 +144,13 @@ with col1:
     
     c1, c2 = st.columns(2)
     with c1:
-        prop_location = st.text_input("Location / Neighborhood", placeholder="e.g., Anna Nagar West, Chennai", key="p_loc")
-        prop_price = st.text_input("Price / Price Range", placeholder="e.g., ₹1.85 Cr (Negotiable)", key="p_price")
+        prop_location = st.text_input("Location / Neighborhood *", placeholder="e.g., Anna Nagar West, Chennai", key="p_loc")
+        prop_price = st.text_input("Price / Price Range *", placeholder="e.g., ₹1.85 Cr (Negotiable)", key="p_price")
     with c2:
         prop_type = st.selectbox("Property Type", ["Residential Apartment", "Independent Villa", "Plot / Land", "Commercial Space", "Penthouse", "Studio Apartment"], key="p_type")
         prop_size = st.text_input("Built-up Area / Carpet Area", placeholder="e.g., 1,850 sq.ft (Carpet)", key="p_size")
         
-    prop_specs = st.text_area("Key Features & Amenities", placeholder="e.g., 3 Bedrooms, 3 Bathrooms, 2 Balconies, East Facing, Modular Kitchen, 2 Covered Car Parks, Swimming Pool, Clubhouse, 24/7 Security.", height=110, key="p_specs")
+    prop_specs = st.text_area("Key Features & Amenities *", placeholder="e.g., 3 Bedrooms, 3 Bathrooms, 2 Balconies, East Facing, Modular Kitchen, 2 Covered Car Parks, Swimming Pool, Clubhouse, 24/7 Security.", height=110, key="p_specs")
 
 with col2:
     st.subheader("🎯 Campaign Strategy & Visuals")
@@ -200,17 +217,22 @@ st.markdown("---")
 generate_btn = st.button("🚀 Generate Multi-Channel Campaign", type="primary", use_container_width=True)
 
 if generate_btn:
-    if not prop_location or not prop_price or not prop_specs:
+    # Mandatory Validation Checks
+    if not agent_name.strip() or not agent_phone.strip() or not agent_email.strip():
+        st.error("⚠️ Please complete the required **Agent / Builder Profile** fields in the sidebar (Name, WhatsApp, and Email) to brand your campaign.")
+    elif not prop_location.strip() or not prop_price.strip() or not prop_specs.strip():
         st.warning("⚠️ Please provide at least the Location, Price, and Key Features before generating.")
     else:
+        # Save lead profile to database automatically
+        log_lead_profile(agent_name, agent_phone, agent_ig, agent_email, agent_rera)
+        
         with st.spinner("✨ Gemini is analyzing your property specs, visuals, and crafting your 6-channel campaign..."):
             
-            clean_phone = "".join(filter(str.isdigit, agent_phone or "919884395952"))
+            clean_phone = "".join(filter(str.isdigit, agent_phone))
             if not clean_phone.startswith("91") and len(clean_phone) == 10:
                 clean_phone = f"91{clean_phone}"
             
-            display_agent = agent_name if agent_name.strip() else "Direct Sales Desk"
-            wa_inquiry_msg = urllib.parse.quote(f"Hi {display_agent}, I am interested in the {prop_title or 'property'} at {prop_location} priced at {prop_price}. Please share full details.")
+            wa_inquiry_msg = urllib.parse.quote(f"Hi {agent_name}, I am interested in the {prop_title or 'property'} at {prop_location} priced at {prop_price}. Please share full details.")
             wa_link = f"https://wa.me/{clean_phone}?text={wa_inquiry_msg}"
 
             prompt_text = f"""
@@ -228,10 +250,10 @@ Generate a comprehensive, high-converting 6-channel marketing campaign package f
 - Output Language: {target_language} (Note: If a regional language with native script like Tamil, Hindi, Telugu, Kannada, or Malayalam is selected, write the copy fluently in that native script with natural regional real-estate vocabulary).
 
 ### AGENT / BUILDER / REALTOR BRANDING:
-- Agent/Agency/Builder: {display_agent}
-- WhatsApp Number: {agent_phone or 'Contact on Request'}
+- Agent/Agency/Builder: {agent_name}
+- WhatsApp Number: {agent_phone}
 - Instagram Handle: {agent_ig or '@realtor'}
-- Email: {agent_email or 'Contact on Request'}
+- Email: {agent_email}
 - RERA ID: {agent_rera or 'Available on Request'}
 - Direct WhatsApp Inquiry Link: {wa_link}
 
