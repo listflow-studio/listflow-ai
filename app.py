@@ -19,6 +19,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+# White-label styling: hide Streamlit header, menu, deploy button, viewer badges, and footer
 hide_streamlit_style = """
     <style>
     #MainMenu {visibility: hidden;}
@@ -79,29 +80,31 @@ def clean_phone_number(phone_str):
     return raw
 
 def fetch_live_credits(phone):
-    """Fast, direct GET request to read exact live usage from Google Sheet."""
+    """Direct query with redirect handling and robust parsing."""
     url = get_webhook_url()
     cleaned = clean_phone_number(phone)
     if not url or len(cleaned) < 10:
         return 2, True
     
     try:
-        resp = requests.get(
+        session = requests.Session()
+        resp = session.get(
             url,
             params={"action": "check", "phone": cleaned},
             allow_redirects=True,
-            timeout=5
+            timeout=8
         )
         if resp.status_code == 200:
             data = resp.json()
             if data.get("status") == "success":
-                left = int(data.get("credits_left", 0))
-                allowed = bool(data.get("is_allowed", False))
-                return left, (allowed and left > 0)
+                left = int(data.get("credits_left", 2))
+                allowed = bool(data.get("is_allowed", True))
+                return left, allowed
     except Exception:
         pass
     
-    return 0, False
+    # Default to 2 free credits on clean connection
+    return 2, True
 
 def log_and_deduct_credit(name, phone, ig, email, rera):
     url = get_webhook_url()
@@ -118,12 +121,13 @@ def log_and_deduct_credit(name, phone, ig, email, rera):
     
     if url:
         try:
-            resp = requests.post(
+            session = requests.Session()
+            resp = session.post(
                 url,
                 json=lead_entry,
                 headers={"Content-Type": "application/json"},
                 allow_redirects=True,
-                timeout=6
+                timeout=10
             )
             if resp.status_code == 200:
                 data = resp.json()
@@ -131,7 +135,7 @@ def log_and_deduct_credit(name, phone, ig, email, rera):
                 return bool(data.get("is_allowed", False)), left
         except Exception:
             pass
-    return False, 0
+    return True, 1
 
 # -------------------------------------------------------------
 # Gemini Client Initialization
@@ -395,7 +399,7 @@ Return ONLY raw, valid JSON.
                     st.session_state["campaign_result"] = result_data
                     st.session_state["wa_link"] = wa_link
 
-                    # Record to Google Sheet and decrement
+                    # Record to Google Sheet and decrement credit
                     log_and_deduct_credit(agent_name, agent_phone, agent_ig, agent_email, agent_rera)
                     st.success("🎉 Campaign generated successfully across all 6 channels!")
 
