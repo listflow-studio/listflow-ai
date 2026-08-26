@@ -7,18 +7,28 @@ from google import genai
 from google.genai import types
 
 # -------------------------------------------------------------
-# Streamlit Page Configuration
+# Streamlit Page Configuration & White-Label CSS
 # -------------------------------------------------------------
 st.set_page_config(
-    page_title="ListFlow AI | Real Estate Multi-Channel Studio",
+    page_title="ListFlow AI | Real Estate Marketing Studio",
     page_icon="🏢",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# Custom Styling
-st.markdown("""
+# Hide Streamlit Default Menu, GitHub fork icons, footer, and deploy badges
+hide_streamlit_style = """
     <style>
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
+    .viewerBadge_container__1QSob {display: none !important;}
+    .stDeployButton {display: none !important;}
+    .stDecoration {display: none !important;}
+    div[data-testid="stToolbar"] {visibility: hidden; height: 0%; position: -webkit-sticky; position: sticky;}
+    div[data-testid="stDecoration"] {display: none;}
+    div[data-testid="stStatusWidget"] {visibility: hidden;}
+    
     .main-title {
         font-size: 2.2rem;
         font-weight: 800;
@@ -32,22 +42,14 @@ st.markdown("""
         font-size: 1.05rem;
         margin-bottom: 1.5rem;
     }
-    .badge-card {
-        padding: 0.6rem 1rem;
-        border-radius: 8px;
-        background: #F1F5F9;
-        border-left: 4px solid #2563EB;
-        font-size: 0.9rem;
-        margin-bottom: 1rem;
-    }
     </style>
-""", unsafe_allow_html=True)
+"""
+st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
 # -------------------------------------------------------------
 # Gemini Client Initialization
 # -------------------------------------------------------------
 def get_gemini_client():
-    # Attempt to read from Streamlit secrets, then environment variable
     api_key = None
     if "GEMINI_API_KEY" in st.secrets:
         api_key = st.secrets["GEMINI_API_KEY"]
@@ -55,14 +57,14 @@ def get_gemini_client():
         api_key = os.environ.get("GEMINI_API_KEY")
     
     if not api_key:
-        st.error("⚠️ Gemini API Key not found! Please configure `GEMINI_API_KEY` in Streamlit Secrets or Environment Variables.")
+        st.error("⚠️ Gemini API Key not configured. Please add `GEMINI_API_KEY` to secrets.")
         st.stop()
     return genai.Client(api_key=api_key)
 
 client = get_gemini_client()
 
 # -------------------------------------------------------------
-# Sidebar: Agent Profile, Support & Feedback
+# Sidebar: Agent Inputs & Support Drawer
 # -------------------------------------------------------------
 with st.sidebar:
     st.image("https://images.unsplash.com/photo-1560518883-ce09059eeffa?w=600&auto=format&fit=crop&q=80", use_container_width=True)
@@ -71,10 +73,11 @@ with st.sidebar:
     
     st.markdown("---")
     st.subheader("👤 Agent / Broker Profile")
-    agent_name = st.text_input("Agent / Agency Name", value="Neyora Realty Services")
-    agent_phone = st.text_input("WhatsApp / Phone Number", value="9884395952")
-    agent_email = st.text_input("Contact Email", value="neyora.admin@gmail.com")
-    agent_rera = st.text_input("RERA / License ID (Optional)", value="TN/AGENT/2026/00123")
+    st.caption("Enter your agency branding to auto-inject into listings:")
+    agent_name = st.text_input("Agent / Agency Name", placeholder="e.g., Apex Realty Associates")
+    agent_phone = st.text_input("WhatsApp / Phone Number", placeholder="e.g., 9884012345")
+    agent_email = st.text_input("Contact Email", placeholder="e.g., agent@apexrealty.com")
+    agent_rera = st.text_input("RERA / License ID (Optional)", placeholder="e.g., TN/AGENT/2026/00123")
     
     st.markdown("---")
     st.subheader("💬 Need Help or Have Feedback?")
@@ -87,7 +90,7 @@ with st.sidebar:
     st.markdown(
         f"""
         * 📧 **Email:** [{support_email}](mailto:{support_email}?subject={email_subject})
-        * 💬 **WhatsApp:** [Chat with Us](https://wa.me/{whatsapp_number}?text={whatsapp_msg})
+        * 💬 **WhatsApp:** [Chat with Neyora Support](https://wa.me/{whatsapp_number}?text={whatsapp_msg})
         """
     )
     
@@ -161,11 +164,12 @@ if generate_btn:
     else:
         with st.spinner("✨ Gemini is crafting your 6-channel marketing campaign and analyzing visual highlights..."):
             
-            clean_phone = "".join(filter(str.isdigit, agent_phone))
+            clean_phone = "".join(filter(str.isdigit, agent_phone or "919884395952"))
             if not clean_phone.startswith("91") and len(clean_phone) == 10:
                 clean_phone = f"91{clean_phone}"
             
-            wa_inquiry_msg = urllib.parse.quote(f"Hi {agent_name}, I am interested in the {prop_title or 'property'} at {prop_location} priced at {prop_price}. Please share full details.")
+            display_agent = agent_name if agent_name.strip() else "Direct Sales Desk"
+            wa_inquiry_msg = urllib.parse.quote(f"Hi {display_agent}, I am interested in the {prop_title or 'property'} at {prop_location} priced at {prop_price}. Please share full details.")
             wa_link = f"https://wa.me/{clean_phone}?text={wa_inquiry_msg}"
 
             prompt_text = f"""
@@ -183,10 +187,10 @@ Generate a comprehensive, high-converting 6-channel marketing campaign package f
 - Output Language: {target_language}
 
 ### AGENT BRANDING:
-- Agent/Agency: {agent_name}
-- Contact Phone: {agent_phone}
-- Email: {agent_email}
-- RERA ID: {agent_rera}
+- Agent/Agency: {display_agent}
+- Contact Phone: {agent_phone or 'Contact on Request'}
+- Email: {agent_email or 'Contact on Request'}
+- RERA ID: {agent_rera or 'Available on Request'}
 - Direct WhatsApp Inquiry Link: {wa_link}
 
 ### FORMATTING REQUIREMENTS:
