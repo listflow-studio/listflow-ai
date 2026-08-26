@@ -19,7 +19,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# White-label styling: hide Streamlit header, menu, deploy button, viewer badges, and footer
+# White-label styling
 hide_streamlit_style = """
     <style>
     #MainMenu {visibility: hidden;}
@@ -53,15 +53,44 @@ hide_streamlit_style = """
         margin-bottom: 16px;
         line-height: 1.6;
     }
+    .paywall-card {
+        background: linear-gradient(135deg, #1E293B, #0F172A);
+        color: #FFFFFF;
+        padding: 24px;
+        border-radius: 12px;
+        border: 1px solid #334155;
+        margin: 20px 0;
+    }
     </style>
 """
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
 # -------------------------------------------------------------
-# Google Sheets & Local Lead Storage Engine
+# Credit & Lead Management Engine
 # -------------------------------------------------------------
-def log_lead_profile(name, phone, ig, email, rera):
+def get_webhook_url():
+    if "LEADS_WEBHOOK_URL" in st.secrets:
+        return st.secrets["LEADS_WEBHOOK_URL"]
+    return os.environ.get("LEADS_WEBHOOK_URL")
+
+def check_user_credits(phone):
+    """Queries the Google Sheet backend for remaining trial credits."""
+    webhook_url = get_webhook_url()
+    if not webhook_url or not phone.strip():
+        return 2, True
+    try:
+        resp = requests.post(webhook_url, json={"action": "check", "phone": phone}, timeout=4)
+        data = resp.json()
+        if data.get("status") == "success":
+            return data.get("credits_left", 2), data.get("is_allowed", True)
+    except Exception:
+        pass
+    return 2, True
+
+def log_and_deduct_credit(name, phone, ig, email, rera):
+    """Logs the lead row and decrements available credits."""
     lead_entry = {
+        "action": "log",
         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "name": name.strip(),
         "phone": phone.strip(),
@@ -70,36 +99,15 @@ def log_lead_profile(name, phone, ig, email, rera):
         "rera": rera.strip() if rera else ""
     }
     
-    # 1. Sync directly to Google Sheets Webhook
-    webhook_url = None
-    if "LEADS_WEBHOOK_URL" in st.secrets:
-        webhook_url = st.secrets["LEADS_WEBHOOK_URL"]
-    elif os.environ.get("LEADS_WEBHOOK_URL"):
-        webhook_url = os.environ.get("LEADS_WEBHOOK_URL")
-
+    webhook_url = get_webhook_url()
     if webhook_url:
         try:
-            requests.post(webhook_url, json=lead_entry, timeout=5)
+            resp = requests.post(webhook_url, json=lead_entry, timeout=5)
+            data = resp.json()
+            return data.get("is_allowed", True), data.get("credits_left", 0)
         except Exception:
             pass
-
-    # 2. Local fallback backup
-    lead_file = "leads_database.json"
-    leads = []
-    if os.path.exists(lead_file):
-        try:
-            with open(lead_file, "r", encoding="utf-8") as f:
-                leads = json.load(f)
-        except Exception:
-            leads = []
-            
-    if not any(l.get("phone") == lead_entry["phone"] for l in leads):
-        leads.append(lead_entry)
-        try:
-            with open(lead_file, "w", encoding="utf-8") as f:
-                json.dump(leads, f, indent=2, ensure_ascii=False)
-        except Exception:
-            pass
+    return True, 1
 
 # -------------------------------------------------------------
 # Gemini Client Initialization
@@ -119,7 +127,7 @@ def get_gemini_client():
 client = get_gemini_client()
 
 # -------------------------------------------------------------
-# Sidebar: Agent/Builder Profile, Reset & Asynchronous Feedback
+# Sidebar: Agent Profile, Credit Meter & Reset
 # -------------------------------------------------------------
 with st.sidebar:
     st.image("https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w=800&auto=format&fit=crop&q=80", use_container_width=True)
@@ -127,14 +135,23 @@ with st.sidebar:
     st.caption("AI-Powered Multi-Channel Real Estate Studio")
     
     st.markdown("---")
-    st.subheader("👤 Agent / Builder / Realtor Profile")
-    st.caption("Required to auto-inject your branding and direct contact links:")
+    st.subheader("👤 Agent / Builder Profile")
+    st.caption("Required to brand your launch materials and activate trial credits:")
     
     agent_name = st.text_input("Name / Agency / Builder Name *", placeholder="e.g., Apex Realty / Rajesh Kumar", key="ag_name")
     agent_phone = st.text_input("WhatsApp Number (10 Digits) *", placeholder="e.g., 9884012345", key="ag_phone")
     agent_email = st.text_input("Email ID *", placeholder="e.g., contact@apexrealty.com", key="ag_email")
     agent_ig = st.text_input("Instagram Handle (Optional)", placeholder="e.g., @apexrealty_official", key="ag_ig")
     agent_rera = st.text_input("RERA / License ID (Optional)", placeholder="e.g., TN/AGENT/2026/00123", key="ag_rera")
+    
+    # Credit Badge Indicator
+    clean_digits = "".join(filter(str.isdigit, agent_phone))
+    if len(clean_digits) >= 10:
+        credits_left, is_allowed = check_user_credits(clean_digits)
+        if is_allowed:
+            st.success(f"⚡ **Free Trial Active:** {credits_left} generation(s) left")
+        else:
+            st.error("🔒 **Trial Expired:** 0 credits remaining")
     
     st.markdown("---")
     if st.button("🔄 Reset Studio", use_container_width=True):
@@ -144,13 +161,10 @@ with st.sidebar:
     
     st.markdown("---")
     st.subheader("📩 Feedback & Inquiries")
-    st.caption("For feature requests, custom studio setups, or enterprise inquiries:")
-    
     support_email = "neyora.admin@gmail.com"
     email_subject = "ListFlow%20AI%20Inquiry%20%26%20Feedback"
     st.markdown(f"📧 **Email Desk:** [{support_email}](mailto:{support_email}?subject={email_subject})")
     st.caption("Replies within 24–48 hours.")
-    
     st.caption("Powered by Neyora Studios • Version 1.0.0")
 
 # -------------------------------------------------------------
@@ -233,30 +247,51 @@ with col2:
             st.video(uploaded_video)
 
 # -------------------------------------------------------------
-# Campaign Generation Engine
+# Campaign Generation Engine (With Credit Enforcement)
 # -------------------------------------------------------------
 st.markdown("---")
 
 generate_btn = st.button("🚀 Generate Multi-Channel Campaign", type="primary", use_container_width=True)
 
 if generate_btn:
-    if not agent_name.strip() or not agent_phone.strip() or not agent_email.strip():
-        st.error("⚠️ Please complete the required **Agent / Builder Profile** fields in the sidebar (Name, WhatsApp, and Email) to brand your campaign.")
+    clean_digits = "".join(filter(str.isdigit, agent_phone))
+    
+    if not agent_name.strip() or len(clean_digits) < 10 or not agent_email.strip():
+        st.error("⚠️ Please complete the required **Agent Profile** fields in the sidebar (Name, 10-digit WhatsApp, and Email).")
     elif not prop_location.strip() or not prop_price.strip() or not prop_specs.strip():
         st.warning("⚠️ Please provide at least the Location, Price, and Key Features before generating.")
     else:
-        log_lead_profile(agent_name, agent_phone, agent_ig, agent_email, agent_rera)
+        # Pre-check credit limit before API execution
+        credits_left, is_allowed = check_user_credits(clean_digits)
         
-        with st.spinner("✨ Analyzing property specs, visuals, and crafting your 6-channel campaign..."):
-            
-            clean_phone = "".join(filter(str.isdigit, agent_phone))
-            if not clean_phone.startswith("91") and len(clean_phone) == 10:
-                clean_phone = f"91{clean_phone}"
-            
-            wa_inquiry_msg = urllib.parse.quote(f"Hi {agent_name}, I am interested in the {prop_title or 'property'} at {prop_location} priced at {prop_price}. Please share full details.")
-            wa_link = f"https://wa.me/{clean_phone}?text={wa_inquiry_msg}"
+        if not is_allowed:
+            # Paywall Card for exhausted trial accounts
+            st.markdown(f"""
+            <div class="paywall-card">
+                <h3 style="color:#60A5FA; margin-top:0;">🔒 You have used your 2 free campaign credits!</h3>
+                <p>We hope ListFlow AI helped you market your listings faster. Upgrade to continue generating unlimited, high-converting launch kits.</p>
+                <hr style="border-color:#334155;">
+                <p><strong>✨ Pro Plan Includes:</strong></p>
+                <ul>
+                    <li>Unlimited Multi-Channel Property Launches</li>
+                    <li>30s Video Reel Scripts & Walkthrough Narratives</li>
+                    <li>All 8 Regional Language Outputs (Tamil, Hindi, Telugu, etc.)</li>
+                    <li>Direct WhatsApp & Social Media Posting Playbook</li>
+                </ul>
+                <p style="margin-top:15px;">👉 <strong>To activate your Pro account or buy credits, email us at:</strong> <a href="mailto:neyora.admin@gmail.com?subject=ListFlow%20Pro%20Upgrade%20Request%20-%20{clean_digits}" style="color:#38BDF8;">neyora.admin@gmail.com</a></p>
+            </div>
+            """, unsafe_allow_html=True)
+        else:
+            with st.spinner("✨ Analyzing property specs, visuals, and crafting your 6-channel campaign..."):
+                
+                clean_phone = clean_digits
+                if not clean_phone.startswith("91") and len(clean_phone) == 10:
+                    clean_phone = f"91{clean_phone}"
+                
+                wa_inquiry_msg = urllib.parse.quote(f"Hi {agent_name}, I am interested in the {prop_title or 'property'} at {prop_location} priced at {prop_price}. Please share full details.")
+                wa_link = f"https://wa.me/{clean_phone}?text={wa_inquiry_msg}"
 
-            prompt_text = f"""
+                prompt_text = f"""
 You are an elite Real Estate Marketing Director and Growth Copywriter.
 Generate a comprehensive, high-converting 6-channel marketing campaign package along with actionable social media posting instructions for the following property.
 
@@ -295,55 +330,57 @@ Return strictly a valid JSON object with the following keys:
 Return ONLY raw, valid JSON.
 """
 
-            try:
-                contents_payload = [prompt_text]
-                
-                if uploaded_photos:
-                    for photo in uploaded_photos:
-                        contents_payload.append(Image.open(photo))
-
-                if uploaded_video:
-                    with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmp_file:
-                        tmp_file.write(uploaded_video.read())
-                        tmp_video_path = tmp_file.name
+                try:
+                    contents_payload = [prompt_text]
                     
-                    video_upload_ref = client.files.upload(file=tmp_video_path)
-                    contents_payload.append(video_upload_ref)
+                    if uploaded_photos:
+                        for photo in uploaded_photos:
+                            contents_payload.append(Image.open(photo))
 
-                # Active endpoints
-                models_to_try = [
-                    "gemini-3.6-flash",
-                    "gemini-3.7-flash"
-                ]
-                
-                response = None
-                errors_log = []
+                    if uploaded_video:
+                        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmp_file:
+                            tmp_file.write(uploaded_video.read())
+                            tmp_video_path = tmp_file.name
+                        
+                        video_upload_ref = client.files.upload(file=tmp_video_path)
+                        contents_payload.append(video_upload_ref)
 
-                for model_candidate in models_to_try:
-                    try:
-                        response = client.models.generate_content(
-                            model=model_candidate,
-                            contents=contents_payload,
-                            config=types.GenerateContentConfig(
-                                response_mime_type="application/json"
+                    models_to_try = [
+                        "gemini-3.6-flash",
+                        "gemini-3.7-flash"
+                    ]
+                    
+                    response = None
+                    errors_log = []
+
+                    for model_candidate in models_to_try:
+                        try:
+                            response = client.models.generate_content(
+                                model=model_candidate,
+                                contents=contents_payload,
+                                config=types.GenerateContentConfig(
+                                    response_mime_type="application/json"
+                                )
                             )
-                        )
-                        if response and response.text:
-                            break
-                    except Exception as err:
-                        errors_log.append(f"{model_candidate}: {str(err)}")
-                        continue
+                            if response and response.text:
+                                break
+                        except Exception as err:
+                            errors_log.append(f"{model_candidate}: {str(err)}")
+                            continue
 
-                if not response or not response.text:
-                    raise Exception(" | ".join(errors_log))
+                    if not response or not response.text:
+                        raise Exception(" | ".join(errors_log))
 
-                result_data = json.loads(response.text)
-                st.session_state["campaign_result"] = result_data
-                st.session_state["wa_link"] = wa_link
-                st.success("🎉 Campaign generated successfully across all 6 channels!")
+                    result_data = json.loads(response.text)
+                    st.session_state["campaign_result"] = result_data
+                    st.session_state["wa_link"] = wa_link
 
-            except Exception as e:
-                st.error(f"Error generating campaign: {str(e)}")
+                    # Log to Google Sheet and deduct 1 credit
+                    allowed, remaining_after = log_and_deduct_credit(agent_name, agent_phone, agent_ig, agent_email, agent_rera)
+                    st.success(f"🎉 Campaign generated! (You have {remaining_after} free generation(s) remaining)")
+
+                except Exception as e:
+                    st.error(f"Error generating campaign: {str(e)}")
 
 # -------------------------------------------------------------
 # Display Campaign Outputs
