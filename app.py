@@ -17,7 +17,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# White-label styling: hide Streamlit header, menu, deploy button, and footer
+# White-label styling: hide Streamlit default chrome, menu, footer & deploy badges
 hide_streamlit_style = """
     <style>
     #MainMenu {visibility: hidden;}
@@ -58,7 +58,7 @@ def get_gemini_client():
         api_key = os.environ.get("GEMINI_API_KEY")
     
     if not api_key:
-        st.error("⚠️ Gemini API Key not configured. Please add `GEMINI_API_KEY` to secrets.")
+        st.error("⚠️ Gemini API Key not configured. Please add `GEMINI_API_KEY` to Streamlit Secrets.")
         st.stop()
     return genai.Client(api_key=api_key)
 
@@ -157,17 +157,27 @@ with col2:
         ]
     )
     
-    # Media Upload (Photo or Video Walkthrough)
-    media_tab1, media_tab2 = st.tabs(["📸 Upload Photo", "🎥 Upload Video Walkthrough"])
+    # Media Upload: Multi-Photo & Video Walkthrough Tabs
+    media_tab1, media_tab2 = st.tabs(["📸 Upload Photos (Multi-Image)", "🎥 Upload Video Walkthrough"])
     
-    uploaded_photo = None
+    uploaded_photos = []
     uploaded_video = None
     
     with media_tab1:
-        uploaded_photo = st.file_uploader("Upload Property Image", type=["jpg", "jpeg", "png"], key="img_up")
-        if uploaded_photo:
-            preview_img = Image.open(uploaded_photo)
-            st.image(preview_img, caption="Uploaded Property Photo", use_container_width=True)
+        uploaded_photos = st.file_uploader(
+            "Upload Property Photos (Living Room, Kitchen, Balcony, Exterior)", 
+            type=["jpg", "jpeg", "png"], 
+            accept_multiple_files=True,
+            key="img_up"
+        )
+        if uploaded_photos:
+            st.caption(f"📸 {len(uploaded_photos)} photo(s) ready for multimodal AI analysis")
+            grid_cols = st.columns(min(len(uploaded_photos), 4))
+            for idx, photo in enumerate(uploaded_photos[:4]):
+                with grid_cols[idx]:
+                    st.image(Image.open(photo), use_container_width=True)
+            if len(uploaded_photos) > 4:
+                st.caption(f"+ {len(uploaded_photos) - 4} more photos queued for AI processing")
             
     with media_tab2:
         uploaded_video = st.file_uploader("Upload Walkthrough Video Clip", type=["mp4", "mov", "avi"], key="vid_up")
@@ -185,7 +195,7 @@ if generate_btn:
     if not prop_location or not prop_price or not prop_specs:
         st.warning("⚠️ Please provide at least the Location, Price, and Key Features before generating.")
     else:
-        with st.spinner("✨ Gemini is analyzing your property specs, visuals, and crafting your 6-channel campaign..."):
+        with st.spinner("✨ Gemini is analyzing your property specs, photos & videos, and crafting your 6-channel campaign..."):
             
             clean_phone = "".join(filter(str.isdigit, agent_phone or "919884395952"))
             if not clean_phone.startswith("91") and len(clean_phone) == 10:
@@ -216,6 +226,9 @@ Generate a comprehensive, high-converting 6-channel marketing campaign package f
 - RERA ID: {agent_rera or 'Available on Request'}
 - Direct WhatsApp Inquiry Link: {wa_link}
 
+### MULTIMODAL INSTRUCTION:
+If property images or video clips are provided, examine them carefully to identify key interior features, architectural highlights, natural lighting, and premium fixtures. Seamlessly highlight these authentic visual details in the copy.
+
 ### FORMATTING REQUIREMENTS:
 Generate high-performing, ready-to-copy marketing copy strictly formatted as a valid JSON object with the following keys:
 {{
@@ -232,10 +245,10 @@ Return ONLY raw, valid JSON. Do not include markdown code block backticks outsid
             try:
                 contents_payload = [prompt_text]
                 
-                # Image Attachment
-                if uploaded_photo:
-                    image_obj = Image.open(uploaded_photo)
-                    contents_payload.append(image_obj)
+                # Multi-Image Attachment
+                if uploaded_photos:
+                    for photo in uploaded_photos:
+                        contents_payload.append(Image.open(photo))
 
                 # Video Attachment via Gemini Files API
                 if uploaded_video:
