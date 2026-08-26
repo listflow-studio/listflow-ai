@@ -293,13 +293,15 @@ Return ONLY raw, valid JSON. Do not include markdown code block backticks outsid
                     video_upload_ref = client.files.upload(file=tmp_video_path)
                     contents_payload.append(video_upload_ref)
 
-                # Production models for Google GenAI SDK
+                # Prioritized model endpoints requested by Gemini API
                 models_to_try = [
                     "gemini-2.5-flash",
+                    "gemini-3.1-pro-preview",
                     "gemini-2.5-pro"
                 ]
+                
                 response = None
-                last_error = None
+                errors_log = []
 
                 for model_candidate in models_to_try:
                     try:
@@ -313,11 +315,11 @@ Return ONLY raw, valid JSON. Do not include markdown code block backticks outsid
                         if response and response.text:
                             break
                     except Exception as err:
-                        last_error = err
+                        errors_log.append(f"{model_candidate}: {str(err)}")
                         continue
 
                 if not response or not response.text:
-                    raise Exception(f"API Error: {str(last_error)}")
+                    raise Exception(" | ".join(errors_log))
 
                 result_data = json.loads(response.text)
                 st.session_state["campaign_result"] = result_data
