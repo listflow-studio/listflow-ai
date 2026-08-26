@@ -19,7 +19,6 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# White-label styling
 hide_streamlit_style = """
     <style>
     #MainMenu {visibility: hidden;}
@@ -73,41 +72,67 @@ def get_webhook_url():
         return st.secrets["LEADS_WEBHOOK_URL"]
     return os.environ.get("LEADS_WEBHOOK_URL")
 
-def check_user_credits(phone):
-    """Queries the Google Sheet backend for remaining trial credits."""
-    webhook_url = get_webhook_url()
-    if not webhook_url or not phone.strip():
+def clean_phone_number(phone_str):
+    raw = "".join(filter(str.isdigit, str(phone_str)))
+    if len(raw) == 12 and raw.startswith("91"):
+        return raw[2:]
+    elif len(raw) == 11 and raw.startswith("0"):
+        return raw[1:]
+    return raw
+
+def query_user_credits(phone):
+    """Hits the Google Sheet webhook with full redirect following."""
+    url = get_webhook_url()
+    cleaned = clean_phone_number(phone)
+    if not url or len(cleaned) < 10:
         return 2, True
+    
     try:
-        resp = requests.post(webhook_url, json={"action": "check", "phone": phone}, timeout=4)
-        data = resp.json()
-        if data.get("status") == "success":
-            return data.get("credits_left", 2), data.get("is_allowed", True)
+        resp = requests.post(
+            url,
+            json={"action": "check", "phone": cleaned},
+            headers={"Content-Type": "application/json"},
+            allow_redirects=True,
+            timeout=8
+        )
+        if resp.status_code == 200:
+            data = resp.json()
+            if data.get("status") == "success":
+                return int(data.get("credits_left", 0)), bool(data.get("is_allowed", False))
     except Exception:
         pass
+    
+    # Fallback to local session check if network hiccups
     return 2, True
 
 def log_and_deduct_credit(name, phone, ig, email, rera):
-    """Logs the lead row and decrements available credits."""
+    url = get_webhook_url()
+    cleaned = clean_phone_number(phone)
     lead_entry = {
         "action": "log",
         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "name": name.strip(),
-        "phone": phone.strip(),
+        "phone": cleaned,
         "email": email.strip(),
         "instagram": ig.strip() if ig else "",
         "rera": rera.strip() if rera else ""
     }
     
-    webhook_url = get_webhook_url()
-    if webhook_url:
+    if url:
         try:
-            resp = requests.post(webhook_url, json=lead_entry, timeout=5)
-            data = resp.json()
-            return data.get("is_allowed", True), data.get("credits_left", 0)
+            resp = requests.post(
+                url,
+                json=lead_entry,
+                headers={"Content-Type": "application/json"},
+                allow_redirects=True,
+                timeout=8
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                return bool(data.get("is_allowed", False)), int(data.get("credits_left", 0))
         except Exception:
             pass
-    return True, 1
+    return True, 0
 
 # -------------------------------------------------------------
 # Gemini Client Initialization
@@ -144,14 +169,17 @@ with st.sidebar:
     agent_ig = st.text_input("Instagram Handle (Optional)", placeholder="e.g., @apexrealty_official", key="ag_ig")
     agent_rera = st.text_input("RERA / License ID (Optional)", placeholder="e.g., TN/AGENT/2026/00123", key="ag_rera")
     
-    # Credit Badge Indicator
-    clean_digits = "".join(filter(str.isdigit, agent_phone))
-    if len(clean_digits) >= 10:
-        credits_left, is_allowed = check_user_credits(clean_digits)
-        if is_allowed:
-            st.success(f"⚡ **Free Trial Active:** {credits_left} generation(s) left")
+    # Active Credit Meter Check
+    cleaned_num = clean_phone_number(agent_phone)
+    credits_left = 2
+    is_allowed = True
+    
+    if len(cleaned_num) >= 10:
+        credits_left, is_allowed = query_user_credits(cleaned_num)
+        if is_allowed and credits_left > 0:
+            st.success(f"⚡ **Free Trial:** {credits_left} generation(s) left")
         else:
-            st.error("🔒 **Trial Expired:** 0 credits remaining")
+            st.error("🔒 **Trial Exhausted:** 0 credits left")
     
     st.markdown("---")
     if st.button("🔄 Reset Studio", use_container_width=True):
@@ -247,47 +275,43 @@ with col2:
             st.video(uploaded_video)
 
 # -------------------------------------------------------------
-# Campaign Generation Engine (With Credit Enforcement)
+# Campaign Generation Engine (Hard Gated)
 # -------------------------------------------------------------
 st.markdown("---")
 
 generate_btn = st.button("🚀 Generate Multi-Channel Campaign", type="primary", use_container_width=True)
 
 if generate_btn:
-    clean_digits = "".join(filter(str.isdigit, agent_phone))
+    cleaned_num = clean_phone_number(agent_phone)
     
-    if not agent_name.strip() or len(clean_digits) < 10 or not agent_email.strip():
+    if not agent_name.strip() or len(cleaned_num) < 10 or not agent_email.strip():
         st.error("⚠️ Please complete the required **Agent Profile** fields in the sidebar (Name, 10-digit WhatsApp, and Email).")
     elif not prop_location.strip() or not prop_price.strip() or not prop_specs.strip():
         st.warning("⚠️ Please provide at least the Location, Price, and Key Features before generating.")
     else:
-        # Pre-check credit limit before API execution
-        credits_left, is_allowed = check_user_credits(clean_digits)
+        # Strict pre-execution quota query
+        credits_left, is_allowed = query_user_credits(cleaned_num)
         
-        if not is_allowed:
-            # Paywall Card for exhausted trial accounts
+        if not is_allowed or credits_left <= 0:
             st.markdown(f"""
             <div class="paywall-card">
-                <h3 style="color:#60A5FA; margin-top:0;">🔒 You have used your 2 free campaign credits!</h3>
-                <p>We hope ListFlow AI helped you market your listings faster. Upgrade to continue generating unlimited, high-converting launch kits.</p>
+                <h3 style="color:#60A5FA; margin-top:0;">🔒 You have used all free trial credits!</h3>
+                <p>You have reached the free limit for <strong>{cleaned_num}</strong>. Upgrade to Pro to continue creating campaigns without limits.</p>
                 <hr style="border-color:#334155;">
-                <p><strong>✨ Pro Plan Includes:</strong></p>
+                <p><strong>✨ Pro Membership Includes:</strong></p>
                 <ul>
                     <li>Unlimited Multi-Channel Property Launches</li>
                     <li>30s Video Reel Scripts & Walkthrough Narratives</li>
                     <li>All 8 Regional Language Outputs (Tamil, Hindi, Telugu, etc.)</li>
                     <li>Direct WhatsApp & Social Media Posting Playbook</li>
                 </ul>
-                <p style="margin-top:15px;">👉 <strong>To activate your Pro account or buy credits, email us at:</strong> <a href="mailto:neyora.admin@gmail.com?subject=ListFlow%20Pro%20Upgrade%20Request%20-%20{clean_digits}" style="color:#38BDF8;">neyora.admin@gmail.com</a></p>
+                <p style="margin-top:15px;">👉 <strong>To activate your Pro account or buy credits, email:</strong> <a href="mailto:neyora.admin@gmail.com?subject=ListFlow%20Pro%20Upgrade%20Request%20-%20{cleaned_num}" style="color:#38BDF8;">neyora.admin@gmail.com</a></p>
             </div>
             """, unsafe_allow_html=True)
         else:
             with st.spinner("✨ Analyzing property specs, visuals, and crafting your 6-channel campaign..."):
                 
-                clean_phone = clean_digits
-                if not clean_phone.startswith("91") and len(clean_phone) == 10:
-                    clean_phone = f"91{clean_phone}"
-                
+                clean_phone = f"91{cleaned_num}"
                 wa_inquiry_msg = urllib.parse.quote(f"Hi {agent_name}, I am interested in the {prop_title or 'property'} at {prop_location} priced at {prop_price}. Please share full details.")
                 wa_link = f"https://wa.me/{clean_phone}?text={wa_inquiry_msg}"
 
@@ -375,9 +399,9 @@ Return ONLY raw, valid JSON.
                     st.session_state["campaign_result"] = result_data
                     st.session_state["wa_link"] = wa_link
 
-                    # Log to Google Sheet and deduct 1 credit
-                    allowed, remaining_after = log_and_deduct_credit(agent_name, agent_phone, agent_ig, agent_email, agent_rera)
-                    st.success(f"🎉 Campaign generated! (You have {remaining_after} free generation(s) remaining)")
+                    # Deduct credit and record lead row
+                    allowed_status, remaining_after = log_and_deduct_credit(agent_name, agent_phone, agent_ig, agent_email, agent_rera)
+                    st.success(f"🎉 Campaign generated! ({remaining_after} free generation(s) remaining)")
 
                 except Exception as e:
                     st.error(f"Error generating campaign: {str(e)}")
@@ -431,7 +455,6 @@ if "campaign_result" in st.session_state:
         st.subheader("30–45s Video Reel / Shorts Walkthrough Script")
         st.text_area("Visual Pacing & Voiceover Script", value=res.get("reel_script", ""), height=300)
 
-    # Export Full Campaign Bundle
     st.markdown("---")
     campaign_export_str = json.dumps(res, indent=2, ensure_ascii=False)
     st.download_button(
