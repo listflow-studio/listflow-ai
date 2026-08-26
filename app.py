@@ -65,7 +65,7 @@ hide_streamlit_style = """
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
 # -------------------------------------------------------------
-# Credit & Lead Management Engine
+# Real-Time Credit & Lead Validation Engine
 # -------------------------------------------------------------
 def get_webhook_url():
     if "LEADS_WEBHOOK_URL" in st.secrets:
@@ -74,36 +74,34 @@ def get_webhook_url():
 
 def clean_phone_number(phone_str):
     raw = "".join(filter(str.isdigit, str(phone_str)))
-    if len(raw) == 12 and raw.startswith("91"):
-        return raw[2:]
-    elif len(raw) == 11 and raw.startswith("0"):
-        return raw[1:]
+    if len(raw) > 10:
+        return raw[-10:]
     return raw
 
-def query_user_credits(phone):
-    """Hits the Google Sheet webhook with full redirect following."""
+def fetch_live_credits(phone):
+    """Fast, direct GET request to read exact live usage from Google Sheet."""
     url = get_webhook_url()
     cleaned = clean_phone_number(phone)
     if not url or len(cleaned) < 10:
         return 2, True
     
     try:
-        resp = requests.post(
+        resp = requests.get(
             url,
-            json={"action": "check", "phone": cleaned},
-            headers={"Content-Type": "application/json"},
+            params={"action": "check", "phone": cleaned},
             allow_redirects=True,
-            timeout=8
+            timeout=5
         )
         if resp.status_code == 200:
             data = resp.json()
             if data.get("status") == "success":
-                return int(data.get("credits_left", 0)), bool(data.get("is_allowed", False))
+                left = int(data.get("credits_left", 0))
+                allowed = bool(data.get("is_allowed", False))
+                return left, (allowed and left > 0)
     except Exception:
         pass
     
-    # Fallback to local session check if network hiccups
-    return 2, True
+    return 0, False
 
 def log_and_deduct_credit(name, phone, ig, email, rera):
     url = get_webhook_url()
@@ -125,14 +123,15 @@ def log_and_deduct_credit(name, phone, ig, email, rera):
                 json=lead_entry,
                 headers={"Content-Type": "application/json"},
                 allow_redirects=True,
-                timeout=8
+                timeout=6
             )
             if resp.status_code == 200:
                 data = resp.json()
-                return bool(data.get("is_allowed", False)), int(data.get("credits_left", 0))
+                left = int(data.get("credits_left", 0))
+                return bool(data.get("is_allowed", False)), left
         except Exception:
             pass
-    return True, 0
+    return False, 0
 
 # -------------------------------------------------------------
 # Gemini Client Initialization
@@ -152,7 +151,7 @@ def get_gemini_client():
 client = get_gemini_client()
 
 # -------------------------------------------------------------
-# Sidebar: Agent Profile, Credit Meter & Reset
+# Sidebar: Agent Profile, Single Credit Badge & Reset
 # -------------------------------------------------------------
 with st.sidebar:
     st.image("https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w=800&auto=format&fit=crop&q=80", use_container_width=True)
@@ -169,13 +168,10 @@ with st.sidebar:
     agent_ig = st.text_input("Instagram Handle (Optional)", placeholder="e.g., @apexrealty_official", key="ag_ig")
     agent_rera = st.text_input("RERA / License ID (Optional)", placeholder="e.g., TN/AGENT/2026/00123", key="ag_rera")
     
-    # Active Credit Meter Check
+    # Single Credit Monitor Display
     cleaned_num = clean_phone_number(agent_phone)
-    credits_left = 2
-    is_allowed = True
-    
-    if len(cleaned_num) >= 10:
-        credits_left, is_allowed = query_user_credits(cleaned_num)
+    if len(cleaned_num) == 10:
+        credits_left, is_allowed = fetch_live_credits(cleaned_num)
         if is_allowed and credits_left > 0:
             st.success(f"⚡ **Free Trial:** {credits_left} generation(s) left")
         else:
@@ -289,14 +285,14 @@ if generate_btn:
     elif not prop_location.strip() or not prop_price.strip() or not prop_specs.strip():
         st.warning("⚠️ Please provide at least the Location, Price, and Key Features before generating.")
     else:
-        # Strict pre-execution quota query
-        credits_left, is_allowed = query_user_credits(cleaned_num)
+        # Pre-execution check directly against Google Sheet
+        credits_left, is_allowed = fetch_live_credits(cleaned_num)
         
         if not is_allowed or credits_left <= 0:
             st.markdown(f"""
             <div class="paywall-card">
                 <h3 style="color:#60A5FA; margin-top:0;">🔒 You have used all free trial credits!</h3>
-                <p>You have reached the free limit for <strong>{cleaned_num}</strong>. Upgrade to Pro to continue creating campaigns without limits.</p>
+                <p>The free trial limit (2 campaigns) for WhatsApp number <strong>{cleaned_num}</strong> has been reached.</p>
                 <hr style="border-color:#334155;">
                 <p><strong>✨ Pro Membership Includes:</strong></p>
                 <ul>
@@ -399,9 +395,9 @@ Return ONLY raw, valid JSON.
                     st.session_state["campaign_result"] = result_data
                     st.session_state["wa_link"] = wa_link
 
-                    # Deduct credit and record lead row
-                    allowed_status, remaining_after = log_and_deduct_credit(agent_name, agent_phone, agent_ig, agent_email, agent_rera)
-                    st.success(f"🎉 Campaign generated! ({remaining_after} free generation(s) remaining)")
+                    # Record to Google Sheet and decrement
+                    log_and_deduct_credit(agent_name, agent_phone, agent_ig, agent_email, agent_rera)
+                    st.success("🎉 Campaign generated successfully across all 6 channels!")
 
                 except Exception as e:
                     st.error(f"Error generating campaign: {str(e)}")
