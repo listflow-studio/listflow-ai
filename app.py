@@ -293,8 +293,11 @@ Return ONLY raw, valid JSON. Do not include markdown code block backticks outsid
                     video_upload_ref = client.files.upload(file=tmp_video_path)
                     contents_payload.append(video_upload_ref)
 
-                # Fallback list across active production endpoints
-                models_to_try = ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-1.5-flash"]
+                # Production models for Google GenAI SDK
+                models_to_try = [
+                    "gemini-2.5-flash",
+                    "gemini-2.5-pro"
+                ]
                 response = None
                 last_error = None
 
@@ -314,7 +317,7 @@ Return ONLY raw, valid JSON. Do not include markdown code block backticks outsid
                         continue
 
                 if not response or not response.text:
-                    raise Exception(f"All model endpoints failed. Last error: {str(last_error)}")
+                    raise Exception(f"API Error: {str(last_error)}")
 
                 result_data = json.loads(response.text)
                 st.session_state["campaign_result"] = result_data
