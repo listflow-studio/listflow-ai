@@ -18,7 +18,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# White-label styling: hide Streamlit default chrome, menu, footer & deploy badges
+# White-label styling: hide Streamlit header, menu, deploy button, viewer badges, and footer
 hide_streamlit_style = """
     <style>
     #MainMenu {visibility: hidden;}
@@ -43,6 +43,13 @@ hide_streamlit_style = """
         color: #64748B;
         font-size: 1.05rem;
         margin-bottom: 1.5rem;
+    }
+    .guide-box {
+        background-color: #F8FAFC;
+        border-left: 4px solid #2563EB;
+        padding: 16px;
+        border-radius: 6px;
+        margin-bottom: 16px;
     }
     </style>
 """
@@ -70,7 +77,6 @@ def log_lead_profile(name, phone, ig, email, rera):
         except Exception:
             leads = []
             
-    # Check if lead with same phone already exists, otherwise append
     if not any(l.get("phone") == lead_entry["phone"] for l in leads):
         leads.append(lead_entry)
         try:
@@ -100,7 +106,8 @@ client = get_gemini_client()
 # Sidebar: Agent/Builder Profile, Reset & Asynchronous Feedback
 # -------------------------------------------------------------
 with st.sidebar:
-    st.image("https://images.unsplash.com/photo-1560518883-ce09059eeffa?w=600&auto=format&fit=crop&q=80", use_container_width=True)
+    # High-end modern luxury architectural visual
+    st.image("https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w=800&auto=format&fit=crop&q=80", use_container_width=True)
     st.title("🏢 ListFlow AI")
     st.caption("AI-Powered Multi-Channel Real Estate Studio")
     
@@ -115,7 +122,6 @@ with st.sidebar:
     agent_rera = st.text_input("RERA / License ID (Optional)", placeholder="e.g., TN/AGENT/2026/00123", key="ag_rera")
     
     st.markdown("---")
-    # Reset Studio Button
     if st.button("🔄 Reset Studio", use_container_width=True):
         for key in list(st.session_state.keys()):
             del st.session_state[key]
@@ -185,7 +191,6 @@ with col2:
         key="t_lang"
     )
     
-    # Media Upload: Multi-Photo & Video Walkthrough Tabs
     media_tab1, media_tab2 = st.tabs(["📸 Upload Property Photos (Multiple)", "🎥 Upload Video Walkthrough"])
     
     uploaded_photos = []
@@ -220,13 +225,11 @@ st.markdown("---")
 generate_btn = st.button("🚀 Generate Multi-Channel Campaign", type="primary", use_container_width=True)
 
 if generate_btn:
-    # Mandatory Validation Checks
     if not agent_name.strip() or not agent_phone.strip() or not agent_email.strip():
         st.error("⚠️ Please complete the required **Agent / Builder Profile** fields in the sidebar (Name, WhatsApp, and Email) to brand your campaign.")
     elif not prop_location.strip() or not prop_price.strip() or not prop_specs.strip():
         st.warning("⚠️ Please provide at least the Location, Price, and Key Features before generating.")
     else:
-        # Save lead profile to database automatically
         log_lead_profile(agent_name, agent_phone, agent_ig, agent_email, agent_rera)
         
         with st.spinner("✨ Gemini is analyzing your property specs, visuals, and crafting your 6-channel campaign..."):
@@ -239,8 +242,8 @@ if generate_btn:
             wa_link = f"https://wa.me/{clean_phone}?text={wa_inquiry_msg}"
 
             prompt_text = f"""
-You are an elite Real Estate Copywriter and Growth Marketing Director.
-Generate a comprehensive, high-converting 6-channel marketing campaign package for the following property.
+You are an elite Real Estate Marketing Director and Growth Copywriter.
+Generate a comprehensive, high-converting 6-channel marketing campaign package along with actionable social media posting instructions for the following property.
 
 ### PROPERTY DATA:
 - Property Title: {prop_title}
@@ -250,9 +253,9 @@ Generate a comprehensive, high-converting 6-channel marketing campaign package f
 - Size: {prop_size}
 - Specs & Amenities: {prop_specs}
 - Conversion Strategy Angle: {campaign_angle}
-- Output Language: {target_language} (Note: If a regional language with native script like Tamil, Hindi, Telugu, Kannada, or Malayalam is selected, write the copy fluently in that native script with natural regional real-estate vocabulary).
+- Output Language: {target_language} (Note: If a regional language like Tamil, Hindi, Telugu, Kannada, or Malayalam is selected, write the copy and posting instructions fluently in that native script).
 
-### AGENT / BUILDER / REALTOR BRANDING:
+### AGENT / BUILDER BRANDING:
 - Agent/Agency/Builder: {agent_name}
 - WhatsApp Number: {agent_phone}
 - Instagram Handle: {agent_ig or '@realtor'}
@@ -261,30 +264,29 @@ Generate a comprehensive, high-converting 6-channel marketing campaign package f
 - Direct WhatsApp Inquiry Link: {wa_link}
 
 ### MULTIMODAL INSTRUCTION:
-If property images or video clips are provided, examine each of them carefully to identify key interior features, architectural highlights, natural lighting, and premium fixtures. Seamlessly highlight these authentic visual details in the copy.
+If property images or video clips are provided, analyze them carefully to extract architectural highlights, finishes, and lighting to naturally emphasize them in the copy and posting tips.
 
-### FORMATTING REQUIREMENTS:
-Generate high-performing, ready-to-copy marketing copy strictly formatted as a valid JSON object with the following keys:
+### OUTPUT JSON STRUCTURE:
+Return strictly a valid JSON object with the following keys:
 {{
-  "whatsapp_blast": "Punchy, emoji-rich broadcast copy tailored for WhatsApp buyer groups. Must include bold headlines, bulleted USPs, pricing, and the clickable WhatsApp CTA link.",
-  "email_campaign": "Complete HTML/Markdown email newsletter with a high open-rate Subject Line, Preview Text, Engaging Body Copy, Bulleted Feature Sheet, and Clear Booking Call to Action.",
-  "instagram_caption": "Engaging feed & carousel caption with an attention-grabbing first-line hook, lifestyle aesthetic narrative, bullet points, IG handle tag, CTA to DM/WhatsApp, and 15 targeted hashtags.",
+  "whatsapp_blast": "Punchy, emoji-rich broadcast copy tailored for WhatsApp buyer groups with bold headlines, bulleted USPs, and clickable WhatsApp inquiry link.",
+  "email_campaign": "Complete HTML/Markdown email newsletter with a catchy Subject Line, Preview Text, Engaging Body, Features, and Booking CTA.",
+  "instagram_caption": "Engaging carousel/post caption with a compelling hook, lifestyle narrative, bullet points, IG tag, CTA to DM/WhatsApp, and 15 targeted hashtags.",
   "facebook_ad": "Conversational, community-focused Facebook ad copy with Primary Text, Catchy Headline, Link Description, and CTA.",
-  "mls_portal_description": "Professional, descriptive, and compliance-checked listing overview suitable for MLS, 99acres, Housing.com, Magicbricks, or Zillow. Formal yet compelling.",
-  "reel_script": "30-45 second short-form video reel script with timestamps, visual cues (b-roll instructions), and voiceover narration designed for Instagram Reels/YouTube Shorts."
+  "mls_portal_description": "Professional, compliance-checked listing overview suitable for 99acres, Housing.com, Magicbricks, or MLS.",
+  "reel_script": "30-45 second short-form video reel script with timestamps, visual cues, and voiceover narration.",
+  "posting_instructions": "Step-by-step posting playbook in the target language explaining how to pair uploaded photos/videos with this copy on WhatsApp, Instagram Carousel, Facebook, and Reels for maximum inquiries."
 }}
-Return ONLY raw, valid JSON. Do not include markdown code block backticks outside the JSON.
+Return ONLY raw, valid JSON.
 """
 
             try:
                 contents_payload = [prompt_text]
                 
-                # Multi-Image Attachment
                 if uploaded_photos:
                     for photo in uploaded_photos:
                         contents_payload.append(Image.open(photo))
 
-                # Video Attachment via Gemini Files API
                 if uploaded_video:
                     with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmp_file:
                         tmp_file.write(uploaded_video.read())
@@ -293,11 +295,9 @@ Return ONLY raw, valid JSON. Do not include markdown code block backticks outsid
                     video_upload_ref = client.files.upload(file=tmp_video_path)
                     contents_payload.append(video_upload_ref)
 
-                # Exactly matching the required flash endpoint
                 models_to_try = [
-                    "gemini-3.6-flash",
-                    "gemini-3.6-flash-preview",
-                    "gemini-flash"
+                    "gemini-2.5-flash",
+                    "gemini-2.5-flash-latest"
                 ]
                 
                 response = None
@@ -338,7 +338,8 @@ if "campaign_result" in st.session_state:
 
     st.markdown("### 📦 Your Multi-Channel Campaign Kit")
 
-    tab_wa, tab_email, tab_ig, tab_fb, tab_mls, tab_reel = st.tabs([
+    tab_guide, tab_wa, tab_email, tab_ig, tab_fb, tab_mls, tab_reel = st.tabs([
+        "🚀 How to Post & Upload",
         "⚡ WhatsApp Broadcast",
         "✉️ Email Newsletter",
         "📸 Instagram & TikTok",
@@ -346,6 +347,11 @@ if "campaign_result" in st.session_state:
         "📋 MLS & Portal Listing",
         "🎬 30s Reel Script"
     ])
+
+    with tab_guide:
+        st.subheader("📖 Social Media Posting Playbook & Media Pairing Guide")
+        st.markdown(f'<div class="guide-box">{res.get("posting_instructions", "Follow standard social media posting best practices.")}</div>', unsafe_allow_html=True)
+        st.info("💡 **Tip:** Copy the ready-to-use text from the tabs on the right and pair it directly with your uploaded property photos or walkthrough video on each platform.")
 
     with tab_wa:
         st.subheader("WhatsApp Broadcast & Group Pitch")
