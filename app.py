@@ -1,5 +1,6 @@
 import os
 import json
+import tempfile
 import urllib.parse
 from PIL import Image
 import streamlit as st
@@ -16,7 +17,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Hide Streamlit Default Menu, GitHub fork icons, footer, and deploy badges
+# White-label styling: hide Streamlit header, menu, deploy button, and footer
 hide_streamlit_style = """
     <style>
     #MainMenu {visibility: hidden;}
@@ -64,7 +65,7 @@ def get_gemini_client():
 client = get_gemini_client()
 
 # -------------------------------------------------------------
-# Sidebar: Agent Inputs & Support Drawer
+# Sidebar: Broker Profile & Support/Feedback Drawer
 # -------------------------------------------------------------
 with st.sidebar:
     st.image("https://images.unsplash.com/photo-1560518883-ce09059eeffa?w=600&auto=format&fit=crop&q=80", use_container_width=True)
@@ -94,13 +95,14 @@ with st.sidebar:
         """
     )
     
-    with st.expander("📝 Quick Feedback"):
-        feedback_text = st.text_area("Share your thoughts or feature requests:", height=80, key="quick_feedback")
-        if st.button("Submit Feedback", use_container_width=True):
-            if feedback_text.strip():
-                st.success("Thank you! Your feedback has been noted.")
-            else:
-                st.warning("Please enter a short note before submitting.")
+    with st.expander("📝 Submit Feedback Directly"):
+        fb_note = st.text_area("Share your feature request or review:", height=80, key="fb_input")
+        if fb_note.strip():
+            encoded_fb = urllib.parse.quote(f"ListFlow AI User Feedback: {fb_note.strip()}")
+            wa_fb_link = f"https://wa.me/{whatsapp_number}?text={encoded_fb}"
+            st.markdown(f"[👉 Click to Send via WhatsApp]({wa_fb_link})", unsafe_allow_html=True)
+            mail_fb_link = f"mailto:{support_email}?subject=ListFlow%20AI%20Feedback&body={encoded_fb}"
+            st.markdown(f"[👉 Click to Send via Email]({mail_fb_link})", unsafe_allow_html=True)
 
     st.caption("Powered by Neyora Studios • Version 1.0.0")
 
@@ -108,7 +110,7 @@ with st.sidebar:
 # Main Application Interface
 # -------------------------------------------------------------
 st.markdown('<div class="main-title">ListFlow AI — Real Estate Launch Studio</div>', unsafe_allow_html=True)
-st.markdown('<div class="sub-title">Turn property specs and photos into high-converting 6-channel marketing campaigns in seconds.</div>', unsafe_allow_html=True)
+st.markdown('<div class="sub-title">Turn property specs, photos, and walkthrough videos into high-converting 6-channel marketing campaigns.</div>', unsafe_allow_html=True)
 
 col1, col2 = st.columns([1.1, 0.9], gap="medium")
 
@@ -143,13 +145,34 @@ with col2:
     
     target_language = st.selectbox(
         "Campaign Language / Tone",
-        ["English", "Hindi", "Tamil", "Telugu", "Kannada", "Malayalam"]
+        [
+            "English",
+            "Tamil (தமிழ்)",
+            "Hindi (हिन्दी)",
+            "Telugu (తెలుగు)",
+            "Kannada (ಕನ್ನಡ)",
+            "Malayalam (മലയാളം)",
+            "Tanglish (Tamil + English Hybrid)",
+            "Hinglish (Hindi + English Hybrid)"
+        ]
     )
     
-    uploaded_photo = st.file_uploader("Upload Property Photo (Optional Multimodal Vision)", type=["jpg", "jpeg", "png"])
-    if uploaded_photo:
-        preview_img = Image.open(uploaded_photo)
-        st.image(preview_img, caption="Uploaded Property Photo", use_container_width=True)
+    # Media Upload (Photo or Video Walkthrough)
+    media_tab1, media_tab2 = st.tabs(["📸 Upload Photo", "🎥 Upload Video Walkthrough"])
+    
+    uploaded_photo = None
+    uploaded_video = None
+    
+    with media_tab1:
+        uploaded_photo = st.file_uploader("Upload Property Image", type=["jpg", "jpeg", "png"], key="img_up")
+        if uploaded_photo:
+            preview_img = Image.open(uploaded_photo)
+            st.image(preview_img, caption="Uploaded Property Photo", use_container_width=True)
+            
+    with media_tab2:
+        uploaded_video = st.file_uploader("Upload Walkthrough Video Clip", type=["mp4", "mov", "avi"], key="vid_up")
+        if uploaded_video:
+            st.video(uploaded_video)
 
 # -------------------------------------------------------------
 # Campaign Generation Engine
@@ -162,7 +185,7 @@ if generate_btn:
     if not prop_location or not prop_price or not prop_specs:
         st.warning("⚠️ Please provide at least the Location, Price, and Key Features before generating.")
     else:
-        with st.spinner("✨ Gemini is crafting your 6-channel marketing campaign and analyzing visual highlights..."):
+        with st.spinner("✨ Gemini is analyzing your property specs, visuals, and crafting your 6-channel campaign..."):
             
             clean_phone = "".join(filter(str.isdigit, agent_phone or "919884395952"))
             if not clean_phone.startswith("91") and len(clean_phone) == 10:
@@ -184,7 +207,7 @@ Generate a comprehensive, high-converting 6-channel marketing campaign package f
 - Size: {prop_size}
 - Specs & Amenities: {prop_specs}
 - Conversion Strategy Angle: {campaign_angle}
-- Output Language: {target_language}
+- Output Language: {target_language} (Note: If a regional language with native script like Tamil, Hindi, Telugu, Kannada, or Malayalam is selected, write the copy fluently in that native script with natural regional real-estate vocabulary).
 
 ### AGENT BRANDING:
 - Agent/Agency: {display_agent}
@@ -208,9 +231,20 @@ Return ONLY raw, valid JSON. Do not include markdown code block backticks outsid
 
             try:
                 contents_payload = [prompt_text]
+                
+                # Image Attachment
                 if uploaded_photo:
                     image_obj = Image.open(uploaded_photo)
                     contents_payload.append(image_obj)
+
+                # Video Attachment via Gemini Files API
+                if uploaded_video:
+                    with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmp_file:
+                        tmp_file.write(uploaded_video.read())
+                        tmp_video_path = tmp_file.name
+                    
+                    video_upload_ref = client.files.upload(file=tmp_video_path)
+                    contents_payload.append(video_upload_ref)
 
                 response = client.models.generate_content(
                     model="gemini-2.5-flash",
